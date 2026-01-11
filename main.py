@@ -5,9 +5,6 @@ import sys
 
 def find_most_common(start_time, end_time):
 
-    # format for faster comparison, string comparison faster than datetime
-    # start_str = start_time.strftime("%Y-%m-%d %H")
-    # end_str = end_time.strftime("%Y-%m-%d %H")
 
     color_counter = Counter()
     pixel_counter = Counter()
@@ -31,12 +28,6 @@ def find_most_common(start_time, end_time):
                     pixel_counter[pixel] += 1
                     total_records += 1
     
-    # print("top 10 colors:")
-    # for color, count in color_counter.most_common(10):
-    #     print(f"{color}: {count}")
-    # print("top 10 pixels:")
-    # for pixel, count in pixel_counter.most_common(10):
-    #     print(f"{pixel}: {count}")
 
     most_common_color = color_counter.most_common(1)[0]
     most_common_pixel = pixel_counter.most_common(1)[0]
@@ -53,9 +44,6 @@ if __name__ == "__main__":
 
     try:
         execution_time = time.time()
-
-        # start_dt = datetime.strptime(start_time, "%Y-%m-%d %H")
-        # end_dt = datetime.strptime(end_time, "%Y-%m-%d %H")
 
         if end_time <= start_time:
             print("end hour must be after start hour")
