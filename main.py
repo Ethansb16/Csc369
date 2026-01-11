@@ -28,6 +28,13 @@ def find_most_common(start_time, end_time):
 
                     color_counter[color] += 1
                     pixel_counter[pixel] += 1
+    
+    # print("top 10 colors:")
+    # for color, count in color_counter.most_common(10):
+    #     print(f"{color}: {count}")
+    # print("top 10 pixels:")
+    # for pixel, count in pixel_counter.most_common(10):
+    #     print(f"{pixel}: {count}")
 
     most_common_color = color_counter.most_common(1)[0] 
     most_common_pixel = pixel_counter.most_common(1)[0]
