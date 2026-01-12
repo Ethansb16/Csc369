@@ -1,5 +1,4 @@
 from collections import Counter
-from datetime import datetime
 import time
 import sys
 
@@ -8,7 +7,7 @@ def find_most_common(start_time, end_time):
 
     color_counter = Counter()
     pixel_counter = Counter()
-    total_records = 0
+    # total_records = 0
 
     print(f"finding results for ==> {start_time} to {end_time}")
 
@@ -26,13 +25,14 @@ def find_most_common(start_time, end_time):
 
                     color_counter[color] += 1
                     pixel_counter[pixel] += 1
-                    total_records += 1
+                    # total_records += 1
     
 
     most_common_color = color_counter.most_common(1)[0]
     most_common_pixel = pixel_counter.most_common(1)[0]
 
-    return most_common_color, most_common_pixel, total_records
+    return most_common_color, most_common_pixel
+    # , total_records
 
 
 if __name__ == "__main__":
@@ -48,10 +48,11 @@ if __name__ == "__main__":
         if end_time <= start_time:
             print("end hour must be after start hour")
 
-        color_result, pixel_result, total_records = find_most_common(start_time, end_time)
+        color_result, pixel_result = find_most_common(start_time, end_time)
+        # , total_records
 
         print(f"time elapsed: {time.time() - execution_time}")
-        print(f"total records searched: {total_records}")
+        # print(f"total records searched: {total_records}")
         print(f"most common color: {color_result[0]} (placed {color_result[1]} times)")
         print(f"most common pixel: {pixel_result[0]} (placed {pixel_result[1]} times)")
     except Exception as e:
