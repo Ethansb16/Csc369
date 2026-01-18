@@ -16,7 +16,7 @@ def find_most_common(start_time, end_time):
         for line in f:
             timestamp_prefix = line[:13]
 
-            if start_time <= timestamp_prefix <= end_time:
+            if start_time <= timestamp_prefix < end_time:
                 tokens = line.strip().split(',', maxsplit=3)
 
                 if len(tokens) >= 4:
