@@ -11,19 +11,7 @@ def find_most_common(start_time, end_time):
     # connect to db
     con = duckdb.connect()
 
-    # query to filter to table with pixel and color sorted
-    query = """
-    SELECT
-        pixel_color,
-        coordinate,
-        COUNT(*) as count
-    FROM read_csv_auto('csv.csv', header=true)
-    WHERE timestamp >= ? AND timestamp < ?
-    GROUP BY pixel_color, coordinate
-    ORDER BY count DESC
-    """
-
-    # pull color from table above
+    # pull color from db
     color_query = """
     SELECT
         pixel_color,
@@ -35,7 +23,7 @@ def find_most_common(start_time, end_time):
     LIMIT 1
     """
 
-    # pull pixel from table 
+    # pull pixel from db
     pixel_query = """
     SELECT
         coordinate,
