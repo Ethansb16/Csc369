@@ -1,5 +1,11 @@
 import duckdb
 import os
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import numpy as np
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARQUET = os.path.join(SCRIPT_DIR, "data.parquet")
@@ -112,7 +118,7 @@ def group_analysis_top_regions(con, top_n=10):
             INNER JOIN region_conflict r
                 ON FLOOR(c.x / 20)::INT * 20 = r.rx
                 AND FLOOR(c.y / 20)::INT * 20 = r.ry
-            GROUP BY rx, ry, c.prev_color, c.color)
+            GROUP BY FLOOR(c.x / 20)::INT * 20, FLOOR(c.y / 20)::INT * 20, c.prev_color, c.color)
         SELECT rx, ry, attacker_lost, attacker_won, times
         FROM region_colors
         ORDER BY rx, ry, times DESC
@@ -138,38 +144,141 @@ def time_conflict(con):
     return hourly
 
 
-def final_vs_peak_colors(con):
-    # final color vs what color was placed most (who won the war)
-    summary = con.execute('''
-        -- final color per pixel
-        WITH last_color AS (
-            SELECT x, y, color AS final_color
-            FROM (
-                SELECT x, y, color,
-                    ROW_NUMBER() OVER (PARTITION BY x, y ORDER BY timestamp DESC) AS rn
-                FROM read_parquet(?))
-            WHERE rn = 1),
-        -- most frequently placed color per pixel
-        most_freq AS (
-            SELECT x, y, color AS freq_color
-            FROM (
-                SELECT x, y, color, COUNT(*) AS cnt,
-                    ROW_NUMBER() OVER (PARTITION BY x, y ORDER BY COUNT(*) DESC) AS rn
-                FROM read_parquet(?)
-                GROUP BY x, y, color)
-            WHERE rn = 1)
-        SELECT
-            l.final_color,
-            m.freq_color,
-            COUNT(*) AS pixels
-        FROM last_color l
-        JOIN most_freq m ON l.x = m.x AND l.y = m.y
-        WHERE l.final_color != m.freq_color
-        GROUP BY l.final_color, m.freq_color
-        ORDER BY pixels DESC
-        LIMIT 15
-    ''', [PARQUET, PARQUET]).fetchall()
-    return summary
+
+def plot_conflict_heatmap(grid):
+   canvas = np.zeros((200, 200), dtype=np.float32)
+   for gx, gy, cnt in grid:
+       if 0 <= gx < 200 and 0 <= gy < 200:
+           canvas[gy, gx] = cnt
 
 
+   fig, ax = plt.subplots(figsize=(12, 12))
+   im = ax.imshow(canvas, cmap='inferno', norm=mcolors.LogNorm(vmin=max(1, canvas[canvas > 0].min()), vmax=canvas.max()),
+                  interpolation='nearest', aspect='equal')
+   plt.colorbar(im, ax=ax, label='Color changes per 10x10 region', shrink=0.8)
+   ax.set_title('Territory War Intensity\nColor changes per region across the full timeframe', fontsize=14, fontweight='bold')
+   ax.set_xlabel('X')
+   ax.set_ylabel('Y')
+   plt.tight_layout()
+   plt.savefig(os.path.join(OUTPUT, 'conflict_heatmap.png'), dpi=150, bbox_inches='tight')
+   plt.close()
+
+
+
+
+def plot_time_conflict(hourly):
+   hours = [row[0] for row in hourly]
+   changes = [row[1] for row in hourly]
+
+
+   fig, ax = plt.subplots(figsize=(14, 5))
+   ax.fill_between(range(len(hours)), changes, alpha=0.4, color='#c0392b')
+   ax.plot(range(len(hours)), changes, color='#c0392b', linewidth=1.5)
+   ax.set_ylabel('Color Changes (millions)', fontsize=12)
+   ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x/1e6:.1f}'))
+   ax.set_xlabel('Hour', fontsize=12)
+   ax.set_title('Conflict Intensity Over Time\nHourly color changes across the entire canvas', fontsize=13)
+
+
+   # label every 6th tick
+   tick_positions = list(range(0, len(hours), 6))
+   tick_labels = [str(hours[i])[5:16] for i in tick_positions]
+   ax.set_xticks(tick_positions)
+   ax.set_xticklabels(tick_labels, rotation=45, ha='right', fontsize=8)
+
+
+   plt.tight_layout()
+   plt.savefig(os.path.join(OUTPUT, 'conflict_timeline.png'), dpi=150, bbox_inches='tight')
+   plt.close()
+
+
+
+
+def plot_faction_battles(factions):
+  # top color battles
+   # across all regions: (overwritten_color -> placed_color) -> count
+   battles = {}
+   for rx, ry, lost, won, times in factions:
+       key = (lost, won)
+       battles[key] = battles.get(key, 0) + times
+
+
+   # top 15 battles
+   top = sorted(battles.items(), key=lambda x: -x[1])[:15]
+   labels = []
+   counts = []
+   bar_colors = []
+   for (lost, won), cnt in top:
+       lost_name = COLOR_NAMES.get(lost, lost)
+       won_name = COLOR_NAMES.get(won, won)
+       labels.append(f'{won_name} over {lost_name}')
+       counts.append(cnt)
+       bar_colors.append(won)
+
+
+   fig, ax = plt.subplots(figsize=(14, 6))
+   bars = ax.bar(range(len(labels)), counts, color=bar_colors, edgecolor='#333', linewidth=0.5)
+
+
+   # make light colors visible with dark edge
+   for bar, color in zip(bars, bar_colors):
+       r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+       if r + g + b > 600:
+           bar.set_edgecolor('#999')
+           bar.set_linewidth(1.5)
+
+
+   ax.set_xticks(range(len(labels)))
+   ax.set_xticklabels(labels, fontsize=8, rotation=45, ha='right')
+   ax.set_ylabel('Times This Overwrite Occurred (in top contested regions)', fontsize=11)
+   ax.set_title('Biggest Color Battles in the Most Contested Regions', fontsize=13, fontweight='bold')
+   plt.tight_layout()
+   plt.savefig(os.path.join(OUTPUT, 'faction_battles.png'), dpi=150, bbox_inches='tight')
+   plt.close()
+
+
+
+
+
+if __name__ == "__main__":
+   con = duckdb.connect()
+
+
+   grid = compute_conflict_grid(con)
+   plot_conflict_heatmap(grid)
+   total_changes = sum(row[2] for row in grid)
+   print(f"color changes across canvas: {total_changes}")
+
+
+   print("top 20 most contested pixels:")
+   pixels = top_contested_pixels(con)
+   print(f"{'Pixel'} {'Color Changes'}")
+   for x, y, changes in pixels:
+       print(f"({x}, {y}){changes}")
+
+
+   print("faction analysis for top contested regions")
+   factions = group_analysis_top_regions(con)
+   plot_faction_battles(factions)
+
+
+   # print per region summary
+   current_region = None
+   for rx, ry, lost, won, times in factions:
+       region = (rx, ry)
+       if region != current_region:
+           current_region = region
+           print(f"Region ({rx}, {ry}):")
+       won_name = COLOR_NAMES.get(won, won)
+       lost_name = COLOR_NAMES.get(lost, lost)
+       if times >= 50:
+           print(f"{won_name} overwrote {lost_name}: {times} times")
+
+
+   hourly = time_conflict(con)
+   plot_time_conflict(hourly)
+   peak = max(hourly, key=lambda r: r[1])
+   print(f"peak conflict hour: {peak[0]} with {peak[1]} color changes")
+
+   con.close()
 
